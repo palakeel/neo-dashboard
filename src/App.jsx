@@ -347,7 +347,7 @@ function PortfolioTab() {
   return (
     <div className="space-y-5">
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <SummaryCard label="Total Companies" value="20" />
         <SummaryCard label="Avg Runway" value={`${avgRunway} mo`} />
         <SummaryCard label="Submissions Overdue" value={overdue} accent={overdue > 0 ? 'text-red-600' : 'text-gray-900'} />
@@ -472,7 +472,7 @@ function FundTab() {
   return (
     <div className="space-y-5">
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <SummaryCard label="Total AUM (Called)" value={fmt$(totalAUM)} sub={`of ${fmt$(FUNDS.reduce((s,f)=>s+f.committed,0))} committed`} />
         <SummaryCard label="Total Companies" value="20" />
         <SummaryCard label="Total Exits" value={totalExits} />
@@ -513,7 +513,7 @@ function FundTab() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Sector Concentration */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Sector Concentration</h3>
@@ -576,7 +576,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header style={{ backgroundColor: '#0F1729' }} className="px-8 py-4 flex items-center justify-between">
+      <header style={{ backgroundColor: '#0F1729' }} className="px-4 md:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-white font-bold text-lg tracking-tight">Neo</span>
           <span className="text-gray-400 text-sm">|</span>
@@ -586,7 +586,7 @@ export default function App() {
       </header>
 
       {/* Tabs */}
-      <div style={{ backgroundColor: '#0F1729' }} className="px-8 flex gap-0 border-b border-gray-700">
+      <div style={{ backgroundColor: '#0F1729' }} className="px-4 md:px-8 flex gap-0 border-b border-gray-700">
         {[
           { id: 'portfolio', label: 'Portfolio Companies' },
           { id: 'fund',      label: 'Fund Overview' },
@@ -606,7 +606,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main className="px-8 py-6 flex-1">
+      <main className="px-4 md:px-8 py-6 flex-1">
         {tab === 'portfolio' ? <PortfolioTab /> : <FundTab />}
       </main>
 
