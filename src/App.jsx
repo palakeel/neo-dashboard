@@ -125,6 +125,140 @@ function RunwayCell({ value }) {
   return <span className="text-gray-900">{value}</span>
 }
 
+// ─── Daily Insights ──────────────────────────────────────────────────────────
+
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function getDayContext() {
+  const day = TODAY.getDay()
+  if (day === 1) return 'Start of week — here\'s what to prioritize today.'
+  if (day === 5) return 'End of week — here\'s what\'s still open.'
+  if (day === 0 || day === 6) return 'Weekend check-in — here\'s where things stand.'
+  return 'Here\'s what needs your attention today.'
+}
+
+function buildInsights(companies) {
+  const insights = []
+
+  const chaseNow = companies.filter(c => c.status === 'Overdue' && typeof c.runway === 'number' && c.runway <= 6)
+  if (chaseNow.length > 0) {
+    insights.push({
+      tier: 1,
+      label: 'Chase Today',
+      color: 'red',
+      items: chaseNow.map(c => ({
+        name: c.name,
+        detail: `${daysSince(c.lastReported)}d overdue · ${c.runway} mo runway · ${fmt$(c.burn)}/mo burn`,
+      })),
+    })
+  }
+
+  const chaseWeek = companies.filter(c => c.status === 'Overdue' && typeof c.runway === 'number' && c.runway > 6 && c.runway <= 12)
+  if (chaseWeek.length > 0) {
+    insights.push({
+      tier: 2,
+      label: 'Chase This Week',
+      color: 'orange',
+      items: chaseWeek.map(c => ({
+        name: c.name,
+        detail: `${daysSince(c.lastReported)}d overdue · ${c.runway} mo runway · ${fmt$(c.burn)}/mo burn`,
+      })),
+    })
+  }
+
+  const approaching = companies.filter(c => {
+    const d = daysSince(c.lastReported)
+    return d >= 35 && d < 46
+  })
+  if (approaching.length > 0) {
+    insights.push({
+      tier: 3,
+      label: 'Get Ahead of It',
+      color: 'yellow',
+      items: approaching.map(c => ({
+        name: c.name,
+        detail: `${daysSince(c.lastReported)}d since last report — goes overdue in ${45 - daysSince(c.lastReported)}d`,
+      })),
+    })
+  }
+
+  const submitted = companies.filter(c => c.status === 'Submitted').length
+  const pct = Math.round((submitted / companies.length) * 100)
+  insights.push({
+    tier: 4,
+    label: 'Portfolio Pulse',
+    color: 'blue',
+    items: [{
+      name: `${pct}% submitted this cycle`,
+      detail: `${submitted} current · ${companies.filter(c=>c.status==='Pending').length} pending · ${companies.filter(c=>c.status==='Overdue').length} overdue`,
+    }],
+  })
+
+  return insights
+}
+
+const INSIGHT_STYLES = {
+  red:    { border: 'border-red-200',    bg: 'bg-red-50',    dot: 'bg-red-500',    label: 'text-red-700',    badge: 'bg-red-100 text-red-700' },
+  orange: { border: 'border-orange-200', bg: 'bg-orange-50', dot: 'bg-orange-500', label: 'text-orange-700', badge: 'bg-orange-100 text-orange-700' },
+  yellow: { border: 'border-yellow-200', bg: 'bg-yellow-50', dot: 'bg-yellow-500', label: 'text-yellow-700', badge: 'bg-yellow-100 text-yellow-700' },
+  blue:   { border: 'border-blue-200',   bg: 'bg-blue-50',   dot: 'bg-blue-500',   label: 'text-blue-700',   badge: 'bg-blue-100 text-blue-700' },
+}
+
+function DailyInsights({ companies }) {
+  const [open, setOpen] = useState(true)
+  const insights = useMemo(() => buildInsights(companies), [companies])
+  const actionCount = insights.filter(i => i.tier < 4).reduce((s, i) => s + i.items.length, 0)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-3.5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-gray-900">
+            Today's Focus — {DAY_LABELS[TODAY.getDay()]}
+          </span>
+          <span className="text-xs text-gray-400">{getDayContext()}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {actionCount > 0 && (
+            <span className="bg-red-100 text-red-700 text-xs font-medium px-2 py-0.5 rounded-full">
+              {actionCount} action{actionCount > 1 ? 's' : ''}
+            </span>
+          )}
+          <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-gray-100 divide-y divide-gray-100">
+          {insights.map(insight => {
+            const s = INSIGHT_STYLES[insight.color]
+            return (
+              <div key={insight.label} className={`px-5 py-3 ${s.bg}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.dot}`} />
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${s.label}`}>{insight.label}</span>
+                  <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${s.badge}`}>{insight.items.length}</span>
+                </div>
+                <div className="flex flex-col gap-1.5 pl-4">
+                  {insight.items.map((item, i) => (
+                    <div key={i} className="flex items-baseline gap-2">
+                      <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{item.name}</span>
+                      <span className="text-xs text-gray-500">{item.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── At Risk Panel ────────────────────────────────────────────────────────────
 
 function AtRiskPanel({ companies }) {
@@ -219,6 +353,9 @@ function PortfolioTab() {
         <SummaryCard label="Submissions Overdue" value={overdue} accent={overdue > 0 ? 'text-red-600' : 'text-gray-900'} />
         <SummaryCard label="Submissions Pending"  value={pending}  accent={pending  > 0 ? 'text-yellow-600' : 'text-gray-900'} />
       </div>
+
+      {/* Daily Insights */}
+      <DailyInsights companies={enriched} />
 
       {/* At Risk Panel */}
       <AtRiskPanel companies={enriched} />
