@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
 import {
-  PieChart, Pie, Cell, Tooltip, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer
+  PieChart, Pie, Cell, Tooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell as BarCell
 } from 'recharts'
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 
-const TODAY = new Date('2026-04-16')
+const TODAY = new Date()
 
 function daysAgo(n) {
   const d = new Date(TODAY)
@@ -38,9 +38,9 @@ const COMPANIES = [
 ]
 
 const FUNDS_RAW = [
-  { name: 'Fund I',   vintage: 2018, committed: 80000000,  called: 75000000,  distributions: 42000000, nav: 180000000, irr: 28, exits: 3, active: 3 },
-  { name: 'Fund II',  vintage: 2021, committed: 130000000, called: 110000000, distributions: 8000000,  nav: 195000000, irr: 19, exits: 2, active: 6 },
-  { name: 'Fund III', vintage: 2023, committed: 235000000, called: 140000000, distributions: 2000000,  nav: 168000000, irr: 14, exits: 1, active: 8 },
+  { name: 'Fund I',   vintage: 2018, committed: 80000000,  called: 75000000,  distributions: 42000000, nav: 180000000, irr: 28,  exits: 3, active: 3 },
+  { name: 'Fund II',  vintage: 2021, committed: 130000000, called: 110000000, distributions: 8000000,  nav: 195000000, irr: 19,  exits: 2, active: 6 },
+  { name: 'Fund III', vintage: 2023, committed: 235000000, called: 140000000, distributions: 2000000,  nav: 168000000, irr: 14,  exits: 1, active: 8 },
   { name: 'Fund IV',  vintage: 2025, committed: 320000000, called: 45000000,  distributions: 0,        nav: 48000000,  irr: null, exits: 0, active: 3 },
 ]
 
@@ -50,6 +50,9 @@ const FUNDS = FUNDS_RAW.map(f => ({
   rvpi: f.called > 0 ? f.nav / f.called : 0,
   tvpi: f.called > 0 ? (f.distributions + f.nav) / f.called : 0,
 }))
+
+// Navy gradient: Fund I (darkest) → Fund IV (lightest)
+const FUND_BAR_COLORS = ['#0F1729', '#2A3F6F', '#4A6FA5', '#7A9CC8']
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,7 +68,7 @@ function getStatus(dateStr) {
 }
 
 function runway(cash, burn) {
-  if (!burn) return '—'
+  if (!burn) return null
   return Math.floor(cash / burn)
 }
 
@@ -74,10 +77,6 @@ function fmt$(n) {
   if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`
   if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`
   return `$${n}`
-}
-
-function fmtFull$(n) {
-  return '$' + n.toLocaleString()
 }
 
 function fmtDate(str) {
@@ -91,6 +90,8 @@ const STATUS_STYLES = {
 }
 
 const SECTOR_COLORS = ['#0F1729', '#2563EB', '#7C3AED', '#059669', '#DC2626', '#CA8A04', '#0891B2']
+
+const LAST_UPDATED = TODAY.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 
 // ─── Components ──────────────────────────────────────────────────────────────
 
@@ -117,28 +118,62 @@ function SortIcon({ col, sortCol, sortDir }) {
   return <span className="ml-1 text-gray-600">{sortDir === 'asc' ? '↑' : '↓'}</span>
 }
 
+function RunwayCell({ value }) {
+  if (value === null) return <span className="text-gray-400">—</span>
+  if (value <= 6)  return <span className="font-semibold text-red-600">{value}</span>
+  if (value <= 12) return <span className="font-medium text-yellow-600">{value}</span>
+  return <span className="text-gray-900">{value}</span>
+}
+
+// ─── At Risk Panel ────────────────────────────────────────────────────────────
+
+function AtRiskPanel({ companies }) {
+  const atRisk = companies.filter(c => c.status === 'Overdue' && typeof c.runway === 'number' && c.runway <= 12)
+  if (atRisk.length === 0) return null
+
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-lg px-5 py-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-red-600 font-semibold text-sm">At Risk</span>
+        <span className="bg-red-100 text-red-700 text-xs font-medium px-2 py-0.5 rounded-full">{atRisk.length}</span>
+        <span className="text-red-400 text-xs ml-1">Overdue reporting + &lt;12 mo runway</span>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {atRisk.map(c => (
+          <div key={c.id} className="bg-white border border-red-200 rounded-md px-3 py-2 text-xs">
+            <div className="font-semibold text-gray-900">{c.name}</div>
+            <div className="text-gray-500 mt-0.5">{c.fund} · {c.runway} mo runway</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab 1: Portfolio Companies ───────────────────────────────────────────────
 
 function PortfolioTab() {
   const [filters, setFilters] = useState({ fund: 'All', stage: 'All', sector: 'All', status: 'All' })
   const [sortCol, setSortCol] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
+  const [search, setSearch] = useState('')
 
   const enriched = useMemo(() => COMPANIES.map(c => ({
     ...c,
-    status:  getStatus(c.lastReported),
-    runway:  runway(c.cash, c.burn),
+    status: getStatus(c.lastReported),
+    runway: runway(c.cash, c.burn),
   })), [])
 
   const filtered = useMemo(() => enriched.filter(c => (
     (filters.fund   === 'All' || c.fund   === filters.fund) &&
     (filters.stage  === 'All' || c.stage  === filters.stage) &&
     (filters.sector === 'All' || c.sector === filters.sector) &&
-    (filters.status === 'All' || c.status === filters.status)
-  )), [enriched, filters])
+    (filters.status === 'All' || c.status === filters.status) &&
+    (search === '' || c.name.toLowerCase().includes(search.toLowerCase()))
+  )), [enriched, filters, search])
 
   const sorted = useMemo(() => [...filtered].sort((a, b) => {
-    let av = a[sortCol], bv = b[sortCol]
+    let av = a[sortCol] ?? '', bv = b[sortCol] ?? ''
     if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase()
     if (av < bv) return sortDir === 'asc' ? -1 : 1
     if (av > bv) return sortDir === 'asc' ? 1 : -1
@@ -154,8 +189,8 @@ function PortfolioTab() {
     enriched.reduce((s, c) => s + (typeof c.runway === 'number' ? c.runway : 0), 0) /
     enriched.filter(c => typeof c.runway === 'number').length
   )
-  const overdue  = enriched.filter(c => c.status === 'Overdue').length
-  const pending  = enriched.filter(c => c.status === 'Pending').length
+  const overdue = enriched.filter(c => c.status === 'Overdue').length
+  const pending = enriched.filter(c => c.status === 'Pending').length
 
   const setFilter = (key, val) => setFilters(f => ({ ...f, [key]: val }))
 
@@ -182,11 +217,30 @@ function PortfolioTab() {
         <SummaryCard label="Total Companies" value="20" />
         <SummaryCard label="Avg Runway" value={`${avgRunway} mo`} />
         <SummaryCard label="Submissions Overdue" value={overdue} accent={overdue > 0 ? 'text-red-600' : 'text-gray-900'} />
-        <SummaryCard label="Submissions Pending" value={pending} accent={pending > 0 ? 'text-yellow-600' : 'text-gray-900'} />
+        <SummaryCard label="Submissions Pending"  value={pending}  accent={pending  > 0 ? 'text-yellow-600' : 'text-gray-900'} />
       </div>
+
+      {/* At Risk Panel */}
+      <AtRiskPanel companies={enriched} />
 
       {/* Filter Bar */}
       <div className="bg-white border border-gray-200 rounded-lg px-5 py-3 flex items-center gap-4 flex-wrap">
+        {/* Search */}
+        <div className="flex items-center gap-2">
+          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search company..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="text-sm border border-gray-200 rounded px-2 py-1 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
+          />
+        </div>
+
+        <div className="w-px h-5 bg-gray-200" />
+
         {[
           { key: 'fund',   opts: ['All', 'Fund I', 'Fund II', 'Fund III', 'Fund IV'] },
           { key: 'stage',  opts: ['All', 'Pre-Seed', 'Seed'] },
@@ -204,8 +258,9 @@ function PortfolioTab() {
             </select>
           </div>
         ))}
+
         <button
-          onClick={() => setFilters({ fund: 'All', stage: 'All', sector: 'All', status: 'All' })}
+          onClick={() => { setFilters({ fund: 'All', stage: 'All', sector: 'All', status: 'All' }); setSearch('') }}
           className="ml-auto text-xs text-gray-400 hover:text-gray-600"
         >
           Reset
@@ -241,7 +296,7 @@ function PortfolioTab() {
                   <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{fmt$(c.arr)}</td>
                   <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{fmt$(c.cash)}</td>
                   <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{fmt$(c.burn)}/mo</td>
-                  <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{c.runway}</td>
+                  <td className="px-4 py-3 whitespace-nowrap"><RunwayCell value={c.runway} /></td>
                   <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{c.headcount}</td>
                   <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{fmt$(c.valuation)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs max-w-xs">{c.support || '—'}</td>
@@ -261,8 +316,8 @@ function PortfolioTab() {
 // ─── Tab 2: Fund Overview ────────────────────────────────────────────────────
 
 function FundTab() {
-  const totalAUM = FUNDS.reduce((s, f) => s + f.called, 0)
-  const totalExits = FUNDS.reduce((s, f) => s + f.exits, 0)
+  const totalAUM     = FUNDS.reduce((s, f) => s + f.called, 0)
+  const totalExits   = FUNDS.reduce((s, f) => s + f.exits, 0)
   const weightedTVPI = FUNDS.reduce((s, f) => s + f.tvpi * f.called, 0) / totalAUM
 
   const sectorData = useMemo(() => {
@@ -342,7 +397,7 @@ function FundTab() {
           </ResponsiveContainer>
         </div>
 
-        {/* TVPI by Fund */}
+        {/* TVPI by Fund — navy gradient */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Fund Performance — TVPI</h3>
           <ResponsiveContainer width="100%" height={260}>
@@ -351,7 +406,11 @@ function FundTab() {
               <XAxis type="number" domain={[0, 'auto']} tickFormatter={v => `${v}x`} tick={{ fontSize: 12 }} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={60} />
               <Tooltip formatter={(v) => [`${v}x`, 'TVPI']} />
-              <Bar dataKey="TVPI" fill="#0F1729" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="TVPI" radius={[0, 4, 4, 0]}>
+                {tvpiData.map((_, idx) => (
+                  <Cell key={idx} fill={FUND_BAR_COLORS[idx]} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -368,7 +427,7 @@ export default function App() {
   const dateStr = TODAY.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header style={{ backgroundColor: '#0F1729' }} className="px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -400,9 +459,15 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main className="px-8 py-6">
+      <main className="px-8 py-6 flex-1">
         {tab === 'portfolio' ? <PortfolioTab /> : <FundTab />}
       </main>
+
+      {/* Footer */}
+      <footer className="px-8 py-3 border-t border-gray-200 bg-white flex items-center justify-between">
+        <span className="text-xs text-gray-400">Neo Portfolio Intelligence</span>
+        <span className="text-xs text-gray-400">Last updated: {LAST_UPDATED}</span>
+      </footer>
     </div>
   )
 }
