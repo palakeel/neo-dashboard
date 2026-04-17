@@ -142,7 +142,7 @@ function AtRiskPanel({ companies }) {
         {atRisk.map(c => (
           <div key={c.id} className="bg-white border border-red-200 rounded-md px-3 py-2 text-xs">
             <div className="font-semibold text-gray-900">{c.name}</div>
-            <div className="text-gray-500 mt-0.5">{c.fund} · {c.runway} mo runway</div>
+            <div className="text-gray-500 mt-0.5">{c.fund} · {c.runway} mo runway · {fmt$(c.burn)}/mo burn</div>
           </div>
         ))}
       </div>
@@ -305,8 +305,12 @@ function PortfolioTab() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 border-t border-gray-100 text-xs text-gray-400">
-          Showing {sorted.length} of {enriched.length} companies
+        <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between">
+          <span className="text-xs text-gray-400">Showing {sorted.length} of {enriched.length} companies</span>
+          <span className="text-xs text-gray-400 flex items-center gap-3">
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" /> &lt;6 mo runway</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-yellow-500" /> &lt;12 mo runway</span>
+          </span>
         </div>
       </div>
     </div>
@@ -332,7 +336,7 @@ function FundTab() {
     <div className="space-y-5">
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <SummaryCard label="Total AUM (Called)" value={fmt$(totalAUM)} sub="Across all funds" />
+        <SummaryCard label="Total AUM (Called)" value={fmt$(totalAUM)} sub={`of ${fmt$(FUNDS.reduce((s,f)=>s+f.committed,0))} committed`} />
         <SummaryCard label="Total Companies" value="20" />
         <SummaryCard label="Total Exits" value={totalExits} />
         <SummaryCard label="Weighted Avg TVPI" value={`${weightedTVPI.toFixed(2)}x`} />
@@ -376,17 +380,15 @@ function FundTab() {
         {/* Sector Concentration */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Sector Concentration</h3>
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
                 data={sectorData}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={100}
+                innerRadius={55}
+                outerRadius={90}
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                labelLine={false}
               >
                 {sectorData.map((_, idx) => (
                   <Cell key={idx} fill={SECTOR_COLORS[idx % SECTOR_COLORS.length]} />
@@ -395,6 +397,14 @@ function FundTab() {
               <Tooltip formatter={(v) => [`${v} companies`, 'Count']} />
             </PieChart>
           </ResponsiveContainer>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-2">
+            {sectorData.map((s, idx) => (
+              <span key={s.name} className="flex items-center gap-1.5 text-xs text-gray-600">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SECTOR_COLORS[idx % SECTOR_COLORS.length] }} />
+                {s.name} ({s.value})
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* TVPI by Fund — navy gradient */}
